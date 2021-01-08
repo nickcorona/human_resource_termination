@@ -1,12 +1,14 @@
+from pathlib import Path
+
 import lightgbm as lgb
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from category_encoders import OneHotEncoder, OrdinalEncoder  # sometimes needed
+from dirty_cat import SimilarityEncoder, TargetEncoder
 from sklearn.model_selection import train_test_split
 from statsmodels.nonparametric.smoothers_lowess import lowess
-from dirty_cat import SimilarityEncoder
 
 from helpers import encode_dates, loguniform
 
@@ -72,11 +74,11 @@ ds = lgb.Dataset(Xs, ys)
 dv = lgb.Dataset(Xv, yv, free_raw_data=False)
 
 OBJECTIVE = "binary"
-METRIC = "binary_error"
+METRIC = "binary_logloss"
 MAXIMIZE = False
 EARLY_STOPPING_ROUNDS = 10
 MAX_ROUNDS = 10000
-REPORT_ROUNDS = 10
+REPORT_ROUNDS = 1
 
 params = {
     "objective": OBJECTIVE,
@@ -101,13 +103,13 @@ plt.show()
 
 best_etas = {"learning_rate": [], "score": []}
 
-for _ in range(30):
+for _ in range(200):
     eta = loguniform(-3, 0)
     best_etas["learning_rate"].append(eta)
     params["learning_rate"] = eta
     model = lgb.train(
         params,
-        ds,
+        dt,
         valid_sets=[ds, dv],
         valid_names=["training", "valid"],
         num_boost_round=MAX_ROUNDS,
@@ -147,8 +149,8 @@ params["learning_rate"] = best_eta
 
 model = lgb.train(
     params,
-    ds,
-    valid_sets=[ds, dv],
+    dt,
+    valid_sets=[dt, dv],
     valid_names=["training", "valid"],
     num_boost_round=MAX_ROUNDS,
     early_stopping_rounds=EARLY_STOPPING_ROUNDS,
@@ -176,12 +178,12 @@ for pair in pairs:
             X.drop(correlated_features, axis=1), y, random_state=SEED
         )
         Xs, ys = Xt.loc[sample_idx], yt.loc[sample_idx]
-        ds = ds = lgb.Dataset(Xs, ys, silent=True)
+        dt = ds = lgb.Dataset(Xt, yt, silent=True)
         dv = lgb.Dataset(Xv, yv, silent=True)
         drop_model = lgb.train(
             params,
-            ds,
-            valid_sets=[ds, dv],
+            dt,
+            valid_sets=[dt, dv],
             valid_names=["training", "valid"],
             num_boost_round=MAX_ROUNDS,
             early_stopping_rounds=EARLY_STOPPING_ROUNDS,
@@ -207,13 +209,13 @@ Xt, Xv, yt, yv = train_test_split(
 )  # split into train and validation set
 Xs, ys = Xt.loc[sample_idx], yt.loc[sample_idx]
 dt = lgb.Dataset(Xt, yt, silent=True)
-dt = lgb.Dataset(Xs, ys, silent=True)
+ds = lgb.Dataset(Xs, ys, silent=True)
 dv = lgb.Dataset(Xv, yv, silent=True)
 
 model = lgb.train(
     params,
-    ds,
-    valid_sets=[ds, dv],
+    dt,
+    valid_sets=[dt, dv],
     valid_names=["training", "valid"],
     num_boost_round=MAX_ROUNDS,
     early_stopping_rounds=EARLY_STOPPING_ROUNDS,
@@ -223,7 +225,7 @@ model = lgb.train(
 sorted_features = [
     feature
     for _, feature in sorted(
-        zip(model.feature_importance(importance_type="gain"), ds.feature_name),
+        zip(model.feature_importance(importance_type="gain"), dt.feature_name),
         reverse=False,
     )
 ]
@@ -237,13 +239,13 @@ for feature in sorted_features:
         X.drop(unimportant_features, axis=1), y, random_state=SEED
     )
     Xs, ys = Xt.loc[sample_idx], yt.loc[sample_idx]
-    ds = lgb.Dataset(Xs, ys, silent=True)
+    dt = lgb.Dataset(Xt, yt, silent=True)
     dv = lgb.Dataset(Xv, yv, silent=True)
 
     drop_model = lgb.train(
         params,
-        ds,
-        valid_sets=[ds, dv],
+        dt,
+        valid_sets=[dt, dv],
         valid_names=["training", "valid"],
         num_boost_round=MAX_ROUNDS,
         early_stopping_rounds=EARLY_STOPPING_ROUNDS,
@@ -272,8 +274,8 @@ dv = lgb.Dataset(Xv, yv, silent=True)
 
 model = lgb.train(
     params,
-    ds,
-    valid_sets=[ds, dv],
+    dt,
+    valid_sets=[dt, dv],
     valid_names=["training", "valid"],
     num_boost_round=MAX_ROUNDS,
     early_stopping_rounds=EARLY_STOPPING_ROUNDS,
@@ -288,8 +290,8 @@ dv = lgb.Dataset(Xv, yv, silent=True)
 
 model = lgb.train(
     params,
-    ds,
-    valid_sets=[ds, dv],
+    dt,
+    valid_sets=[dt, dv],
     valid_names=["training", "valid"],
     num_boost_round=MAX_ROUNDS,
     verbose_eval=False,
@@ -319,8 +321,6 @@ model = lgb.train(
 
 lgb.plot_importance(model, importance_type="gain", grid=False)
 plt.show()
-
-from pathlib import Path
 
 Path("models").mkdir(exist_ok=True)
 model.save_model("models/model")
