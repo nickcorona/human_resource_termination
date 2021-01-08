@@ -6,55 +6,47 @@ import seaborn as sns
 from category_encoders import OneHotEncoder, OrdinalEncoder  # sometimes needed
 from sklearn.model_selection import train_test_split
 from statsmodels.nonparametric.smoothers_lowess import lowess
+from dirty_cat import SimilarityEncoder
 
 from helpers import encode_dates, loguniform
 
 df = pd.read_csv(
-    r"data\kiva_loans.csv",
+    r"data\HRDataset_v14.csv",
     parse_dates=[
-        "posted_time",
-        "disbursed_time",
-        "funded_time",
-        "date",
+        "DOB",
+        "DateofHire",
+        "DateofTermination",
+        "LastPerformanceReview_Date",
     ],
-    index_col="id",
+    index_col=["EmpID"],
 )
-df.info()
 
-y = df["repayment_interval"].replace(
-    ["irregular", "bullet", "monthly", "weekly"], [3, 0, 2, 1]
+print(
+    pd.concat([df.dtypes, df.nunique() / len(df)], axis=1)
+    .rename({0: "dtype", 1: "proportion unique"}, axis=1)
+    .sort_values(["dtype", "proportion unique"])
 )
-X = df.drop(["repayment_interval", "use", "tags"], axis=1)
+
+y = df["Termd"]
+X = df.drop(["Termd", "EmploymentStatus", "DateofTermination", "LastPerformanceReview_Date"], axis=1)
+
+X.info()
+date_cols = X.select_dtypes("datetime")
+for col in date_cols:
+    X = encode_dates(X, col)
+
+encode_columns = ["Employee_Name", "Position", "ManagerName"]
+enc = SimilarityEncoder(similarity="ngram", categories="k-means", n_prototypes=5)
+for col in encode_columns:
+    transformed_values = enc.fit_transform(X[col].values.reshape(-1, 1))
+    transformed_values = pd.DataFrame(transformed_values, index=X.index)
+    transformed_values.columns = [f"{col}_" + str(num) for num in transformed_values]
+    X = pd.concat([X, transformed_values], axis=1)
+    X = X.drop(col, axis=1)
 
 obj_cols = X.select_dtypes("object").columns
 X[obj_cols] = X[obj_cols].astype("category")
 
-print((X[obj_cols].nunique() / len(df)).sort_values())
-
-
-def get_male_count(x):
-    count = 0
-    for gender in x.split(", "):
-        if gender == "male":
-            count += 1
-    return count
-
-
-def get_female_count(x):
-    count = 0
-    for gender in x.split(", "):
-        if gender == "female":
-            count += 1
-    return count
-
-
-X["male_count"] = X["borrower_genders"].apply(get_male_count)
-X["female_count"] = X["borrower_genders"].apply(get_female_count)
-
-X = encode_dates(X, "posted_time")
-X = encode_dates(X, "disbursed_time")
-X = encode_dates(X, "funded_time")
-X = encode_dates(X, "date")
 
 SEED = 0
 SAMPLE_SIZE = 5000
@@ -69,31 +61,32 @@ Xs, ys = Xt.loc[sample_idx], yt.loc[sample_idx]
 ds = lgb.Dataset(Xs, ys)
 dv = lgb.Dataset(Xv, yv, free_raw_data=False)
 
-
-OBJECTIVE = "multiclass"
-METRIC = "multi_logloss"
+OBJECTIVE = "binary"
+METRIC = "binary_error"
 MAXIMIZE = False
 EARLY_STOPPING_ROUNDS = 10
 MAX_ROUNDS = 10000
-REPORT_ROUNDS = 100
+REPORT_ROUNDS = 10
 
 params = {
     "objective": OBJECTIVE,
     "metric": METRIC,
     "verbose": -1,
-    "num_classes": 4,
+    "num_classes": 1,
     "n_jobs": 6,
 }
 
 model = lgb.train(
     params,
-    ds,
+    dt,
     valid_sets=[dt, dv],
     valid_names=["training", "valid"],
     num_boost_round=MAX_ROUNDS,
     early_stopping_rounds=EARLY_STOPPING_ROUNDS,
     verbose_eval=REPORT_ROUNDS,
 )
+
+lgb.plot_importance(model, grid=False, importance_type='gain'); plt.show()
 
 best_etas = {"learning_rate": [], "score": []}
 
