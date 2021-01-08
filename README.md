@@ -1,3 +1,3 @@
-Predicting loan interval.
+Predicting human resource termination.
 
-Source: https://www.kaggle.com/gcdatkin/kiva-loan-type-prediction
+Source: https://www.kaggle.com/rhuebner/human-resources-data-set
