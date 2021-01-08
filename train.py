@@ -46,7 +46,7 @@ for col in date_cols:
     X = encode_dates(X, col)
 
 encode_columns = ["Employee_Name", "Position", "ManagerName"]
-enc = SimilarityEncoder(similarity="ngram", categories="k-means", n_prototypes=5)
+enc = SimilarityEncoder(similarity="ngram", categories="k-means", n_prototypes=4)
 for col in encode_columns:
     transformed_values = enc.fit_transform(X[col].values.reshape(-1, 1))
     transformed_values = pd.DataFrame(transformed_values, index=X.index)
