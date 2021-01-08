@@ -28,7 +28,17 @@ print(
 )
 
 y = df["Termd"]
-X = df.drop(["Termd", "EmploymentStatus", "DateofTermination", "LastPerformanceReview_Date"], axis=1)
+X = df.drop(
+    [
+        "Termd",
+        "EmploymentStatus",
+        "DateofTermination",
+        "LastPerformanceReview_Date",
+        "EmpStatusID",
+        "TermReason",
+    ],
+    axis=1,
+)
 
 X.info()
 date_cols = X.select_dtypes("datetime")
@@ -86,7 +96,8 @@ model = lgb.train(
     verbose_eval=REPORT_ROUNDS,
 )
 
-lgb.plot_importance(model, grid=False, importance_type='gain'); plt.show()
+lgb.plot_importance(model, grid=False, importance_type="gain")
+plt.show()
 
 best_etas = {"learning_rate": [], "score": []}
 
